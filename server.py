@@ -1,5 +1,6 @@
 #  coding: utf-8 
 import socketserver
+import os
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -30,9 +31,61 @@ import socketserver
 class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
-        self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        redirect = False
+
+        self.data = self.request.recv(1024).strip().decode("utf-8")
+        if self.data != "":
+            print("Got a request of: %s\n" % self.data)
+
+            try:
+                request, _ = self.data.split('\r\n', 1)
+            except ValueError:
+                pass
+
+            try:
+                method, path, protocol = request.split()
+            except AttributeError:
+                pass
+
+            header = protocol + " "
+
+            if method == "GET":
+
+                if path[-1] == "/":
+                    path += "index.html"
+                elif path[-1] != "/" and '.' not in path:
+                    path += "/index.html"
+                    redirect = True
+
+                extension = path.split(".")[-1]
+                if extension == "html":
+                    mimetype = 'text/html'
+                elif extension == "css":
+                    mimetype = 'text/css'
+
+                try:
+                    f = open("./www" + path, "r").read()
+                    if redirect:
+                        header += "301 Moved Permanently\r\n" + path 
+                    else:
+                        header += "200 OK\r\n" + "Content-Type: " + mimetype + "\r\nContent Length: " + str(len(f))
+                    header += "\r\n"
+
+                    self.request.sendall(bytearray(header + f,'utf-8'))
+                except FileNotFoundError:
+                    header += "404 Not Found"
+                    header += "\r\n"
+
+                    self.request.sendall(bytearray(header,'utf-8'))
+            
+            else:
+                header += "405 Method Not Allowed"
+                header += "\r\n"
+
+                self.request.sendall(bytearray(header,'utf-8'))
+
+            redirect = False
+
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
